@@ -54,7 +54,7 @@ class SkillspectorState(TypedDict, total=False):
     # turn a requested deep scan into a static-only one while still reporting
     # llm_available=true. Reducer is operator.add so records concatenate across
     # the parallel analyzer nodes (same pattern as ``findings``).
-    llm_call_log: Annotated[list[dict[str, object]], operator.add]
+    llm_call_log: Annotated[list[LLMCallRecord], operator.add]
 
     # Model IDs per LLM-using node: e.g. {"default": "...", "meta_analyzer": "..."}
     model_config: dict[str, str]
@@ -83,7 +83,15 @@ class SkillspectorState(TypedDict, total=False):
     yara_rules_dir: str | None
 
 
-def llm_call_record(node_id: str, *, ok: bool, error: str | None = None) -> dict[str, object]:
+class LLMCallRecord(TypedDict):
+    """One LLM-stage telemetry record (an entry in ``llm_call_log``)."""
+
+    node: str
+    ok: bool
+    error: str | None
+
+
+def llm_call_record(node_id: str, *, ok: bool, error: str | None = None) -> LLMCallRecord:
     """Build one telemetry record for ``SkillspectorState['llm_call_log']``.
 
     LLM-backed nodes append a record on each run so the report can tell whether
@@ -100,11 +108,11 @@ class AnalyzerNodeResponse(TypedDict):
     findings: list[Finding]
     # LLM-backed analyzers also report one telemetry record; static analyzers
     # omit it (NotRequired keeps the key optional for them).
-    llm_call_log: NotRequired[list[dict[str, object]]]
+    llm_call_log: NotRequired[list[LLMCallRecord]]
 
 
 class MetaAnalyzerResponse(TypedDict):
     """Strict meta-analyzer update payload for graph state."""
 
     filtered_findings: list[Finding]
-    llm_call_log: NotRequired[list[dict[str, object]]]
+    llm_call_log: NotRequired[list[LLMCallRecord]]

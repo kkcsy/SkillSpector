@@ -38,9 +38,11 @@ from skillspector.sarif_models import (
     SARIF_SCHEMA_URI,
     SarifArtifactLocation,
     SarifDriver,
+    SarifInvocation,
     SarifLocation,
     SarifLog,
     SarifMessage,
+    SarifNotification,
     SarifPhysicalLocation,
     SarifRegion,
     SarifResult,
@@ -102,8 +104,16 @@ def _compute_risk_score(
     return score, severity_band, recommendation
 
 
-def _build_sarif(findings: list[Finding]) -> dict[str, object]:
-    """Build SARIF 2.1.0 log from findings."""
+def _build_sarif(findings: list[Finding], degraded_notice: str | None = None) -> dict[str, object]:
+    """Build SARIF 2.1.0 log from findings.
+
+    When *degraded_notice* is set (the LLM stage was requested but every call
+    failed), a single ``invocation`` is added carrying the notice as a
+    warning-level ``toolExecutionNotifications`` entry — the standard SARIF
+    place for execution-time conditions — so the default output format also
+    surfaces the degradation. ``executionSuccessful`` stays True: the scan
+    completed and produced results; only the LLM sub-stage was degraded.
+    """
     results: list[SarifResult] = []
     for finding in findings:
         start_line = finding.start_line
@@ -124,6 +134,18 @@ def _build_sarif(findings: list[Finding]) -> dict[str, object]:
                 ],
             )
         )
+
+    invocations: list[SarifInvocation] | None = None
+    if degraded_notice:
+        invocations = [
+            SarifInvocation(
+                execution_successful=True,
+                tool_execution_notifications=[
+                    SarifNotification(text=SarifMessage(text=degraded_notice), level="warning")
+                ],
+            )
+        ]
+
     sarif_log = SarifLog(
         schema_=SARIF_SCHEMA_URI,
         runs=[
@@ -132,6 +154,7 @@ def _build_sarif(findings: list[Finding]) -> dict[str, object]:
                     driver=SarifDriver(name="skillspector", version=skillspector_version)
                 ),
                 results=results,
+                invocations=invocations,
             )
         ],
     )
@@ -435,6 +458,7 @@ def report(state: SkillspectorState) -> dict[str, object]:
     # operationally) regardless of output format; also embedded in each format's
     # body / metadata below.
     _attempted, _succeeded, degraded = _llm_runtime_status(use_llm, llm_call_log)
+    degraded_notice = _llm_degradation_notice(use_llm, llm_call_log)
     if degraded:
         logger.warning(
             "LLM stage degraded: %d/%d LLM call(s) failed; report reflects static "
@@ -446,7 +470,7 @@ def report(state: SkillspectorState) -> dict[str, object]:
     risk_score, risk_severity, risk_recommendation = _compute_risk_score(
         findings, has_executable_scripts
     )
-    sarif_report = _build_sarif(findings)
+    sarif_report = _build_sarif(findings, degraded_notice=degraded_notice)
 
     if output_format == "terminal":
         report_body = _format_terminal(

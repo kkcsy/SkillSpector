@@ -23,6 +23,7 @@ import pytest
 
 from skillspector.models import Finding
 from skillspector.nodes.report import report
+from skillspector.sarif_models import validate_sarif_report
 from skillspector.state import SkillspectorState, llm_call_record
 
 
@@ -338,3 +339,45 @@ def test_report_markdown_shows_degraded_warning(monkeypatch: pytest.MonkeyPatch)
     }
     body = report(state)["report_body"]
     assert "Degraded scan" in body
+
+
+def test_report_sarif_carries_degradation_notification() -> None:
+    """The default SARIF output surfaces degradation via a tool-execution notification."""
+    state: SkillspectorState = {
+        "filtered_findings": [],
+        "component_metadata": [],
+        "has_executable_scripts": False,
+        "manifest": {},
+        "output_format": "sarif",
+        "use_llm": True,
+        "llm_call_log": [
+            llm_call_record("semantic_security_discovery", ok=False, error="claude empty stdout"),
+        ],
+    }
+    result = report(state)
+    run = result["sarif_report"]["runs"][0]
+    assert "invocations" in run
+    invocation = run["invocations"][0]
+    assert invocation["executionSuccessful"] is True  # scan completed; LLM sub-stage degraded
+    notification = invocation["toolExecutionNotifications"][0]
+    assert notification["level"] == "warning"
+    assert "STATIC analysis only" in notification["message"]["text"]
+    # The serialized report_body carries it too, and the doc stays schema-valid.
+    body = json.loads(result["report_body"])
+    assert body["runs"][0]["invocations"][0]["toolExecutionNotifications"]
+    validate_sarif_report(result["sarif_report"])
+
+
+def test_report_sarif_no_invocations_when_not_degraded() -> None:
+    """A healthy scan's SARIF output is unchanged (no invocations block)."""
+    state: SkillspectorState = {
+        "filtered_findings": [],
+        "component_metadata": [],
+        "has_executable_scripts": False,
+        "manifest": {},
+        "output_format": "sarif",
+        "use_llm": True,
+        "llm_call_log": [llm_call_record("semantic_security_discovery", ok=True)],
+    }
+    result = report(state)
+    assert "invocations" not in result["sarif_report"]["runs"][0]
