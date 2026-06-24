@@ -56,6 +56,14 @@ class SkillspectorState(TypedDict, total=False):
     # the parallel analyzer nodes (same pattern as ``findings``).
     llm_call_log: Annotated[list[LLMCallRecord], operator.add]
 
+    # Baseline / false-positive suppression. `baseline` is a loaded
+    # skillspector.suppression.Baseline (set by CLI/API); the report node drops
+    # matching findings before scoring. `show_suppressed` keeps them in the
+    # report (marked) for review; `suppressed_findings` is the report output.
+    baseline: object | None
+    show_suppressed: bool
+    suppressed_findings: list[object]
+
     # Model IDs per LLM-using node: e.g. {"default": "...", "meta_analyzer": "..."}
     model_config: dict[str, str]
 

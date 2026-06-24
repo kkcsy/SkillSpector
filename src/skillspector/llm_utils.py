@@ -40,15 +40,17 @@ from typing import NoReturn
 
 from langchain_core.language_models.chat_models import BaseChatModel
 
-from skillspector.constants import MODEL_CONFIG
 from skillspector.model_info import get_max_input_tokens, get_max_output_tokens
 from skillspector.providers import (
     create_chat_model,
     get_active_provider,
+    get_metadata_provider,
     has_cli_capability,
     raise_no_llm_api_key_configured,
     resolve_chat_model_credentials,
+    resolve_provider_credentials,
 )
+from skillspector.providers.openai import OpenAIProvider
 
 
 def _resolve_llm_credentials() -> tuple[str, str | None]:
@@ -65,6 +67,18 @@ def _resolve_llm_credentials() -> tuple[str, str | None]:
     if creds is None:
         raise_no_llm_api_key_configured()
     return creds
+
+
+def _resolve_default_chat_model() -> str:
+    """Return the default chat model for the endpoint that will be used."""
+    if resolve_provider_credentials() is not None:
+        return get_metadata_provider().resolve_model()
+
+    openai_provider = OpenAIProvider()
+    if openai_provider.resolve_credentials() is not None:
+        return openai_provider.resolve_model()
+
+    raise_no_llm_api_key_configured()
 
 
 def is_llm_available() -> tuple[bool, str | None]:
@@ -235,15 +249,15 @@ def get_chat_model(model: str | None = None) -> BaseChatModel | AgentCLIChatMode
     Raises:
         ValueError: when an HTTP provider has no API key configured.
     """
-    resolved_model = model or MODEL_CONFIG["default"]
-
     provider = get_active_provider()
     if has_cli_capability(provider):
+        resolved_model = model or provider.resolve_model()
         return AgentCLIChatModel(provider, resolved_model, get_max_output_tokens(resolved_model))
 
+    model = model or _resolve_default_chat_model()
     return create_chat_model(
-        model=resolved_model,
-        max_tokens=get_max_output_tokens(resolved_model),
+        model=model,
+        max_tokens=get_max_output_tokens(model),
         timeout=120,
     )
 

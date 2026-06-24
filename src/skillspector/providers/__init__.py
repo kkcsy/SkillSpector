@@ -22,15 +22,16 @@ is its own subpackage with a ``provider.py`` and a bundled
 
 Selection happens via the ``SKILLSPECTOR_PROVIDER`` env var:
 
-    openai        → OpenAIProvider          (api.openai.com)
-    anthropic     → AnthropicProvider       (api.anthropic.com)
-    nv_build      → NvBuildProvider         (build.nvidia.com)
-    claude_cli    → ClaudeCLIProvider       (local ``claude`` binary, no API key)
-    codex_cli     → CodexCLIProvider        (local ``codex`` binary, no API key)
-    gemini_cli    → GeminiCLIProvider       (local ``gemini`` binary, no API key)
-    antigravity_cli → AntigravityCLIProvider (local ``agy`` binary; registered
-                                              but disabled — agy is TTY-only and
-                                              can't be captured; use gemini_cli)
+    openai          → OpenAIProvider          (api.openai.com)
+    anthropic       → AnthropicProvider       (api.anthropic.com)
+    anthropic_proxy → AnthropicProxyProvider  (Vertex-style raw-predict proxy)
+    nv_build        → NvBuildProvider          (build.nvidia.com)
+    claude_cli      → ClaudeCLIProvider       (local ``claude`` binary, no API key)
+    codex_cli       → CodexCLIProvider        (local ``codex`` binary, no API key)
+    gemini_cli      → GeminiCLIProvider       (local ``gemini`` binary, no API key)
+    antigravity_cli → AntigravityCLIProvider  (local ``agy`` binary; registered
+                                               but disabled — agy is TTY-only and
+                                               can't be captured; use gemini_cli)
 
 When unset, the selector defaults to ``nv_build``.
 
@@ -83,6 +84,10 @@ def _select_active_provider() -> LLMProvider:
         from .anthropic import AnthropicProvider
 
         return AnthropicProvider()
+    if name == "anthropic_proxy":
+        from .anthropic_proxy import AnthropicProxyProvider
+
+        return AnthropicProxyProvider()
     if name == "nv_build":
         return NvBuildProvider()
     if name == "claude_cli":
@@ -113,8 +118,8 @@ def _select_active_provider() -> LLMProvider:
 
     raise ValueError(
         f"Unknown SKILLSPECTOR_PROVIDER: {name!r}. "
-        "Expected one of: openai, anthropic, nv_build, claude_cli, codex_cli, "
-        "gemini_cli, antigravity_cli (or unset)."
+        "Expected one of: openai, anthropic, anthropic_proxy, nv_build, "
+        "claude_cli, codex_cli, gemini_cli, antigravity_cli (or unset)."
     )
 
 
